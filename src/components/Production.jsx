@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box, Paper, Typography, Chip, Tabs, Tab, LinearProgress, IconButton,
   TextField, InputAdornment, Avatar, Dialog, DialogTitle, DialogContent,
-  DialogActions, Button, Snackbar, Alert, Fab, MenuItem,
+  DialogActions, Button, Snackbar, Alert, Fab, MenuItem, Select, FormControl,
+  Pagination, Tooltip, Collapse, InputLabel
 } from '@mui/material';
 import {
-  Search, Filter, ChevronRight, Clock, CheckCircle2, AlertCircle, Truck, Plus,
+  Search, Filter, ChevronRight, Clock, CheckCircle2, AlertCircle, Truck, Plus, 
+  ArrowUpDown, SlidersHorizontal, Package, Trash2
 } from 'lucide-react';
 
 // ── Production Stages ──────────────────────────────────────
@@ -322,7 +324,6 @@ function StageSummary({ items }) {
 }
 
 
-// ── Main Component ─────────────────────────────────────────
 export default function Production() {
   const [filterTab, setFilterTab] = useState(0);
   const [search, setSearch] = useState('');
@@ -339,16 +340,16 @@ export default function Production() {
     priority: 'medium',
   });
 
-  const tabLabels = ['All Items', ...STAGES];
+  // Advanced Filtering & Pagination State
+  const [showFilters, setShowFilters] = useState(false);
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [woodFilter, setWoodFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('newest'); // newest, oldest, progress-high, progress-low
+  
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(6);
 
-  const filtered = items.filter((item) => {
-    const matchesTab = filterTab === 0 || item.stage === STAGES[filterTab - 1];
-    const matchesSearch =
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.customer.toLowerCase().includes(search.toLowerCase()) ||
-      item.id.toLowerCase().includes(search.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
+  const tabLabels = ['All Items', ...STAGES];
 
   const handleAdd = () => {
     setItems([
@@ -372,6 +373,65 @@ export default function Production() {
     setForm({ name: '', customer: '', wood: 'Teak', stage: STAGES[0], dueDate: '', assignee: '', priority: 'medium' });
   };
 
+  // Filter and Sort Logic
+  const processedItems = useMemo(() => {
+    let result = items;
+
+    // 1. Tab Filter (Stage)
+    if (filterTab !== 0) {
+      result = result.filter(item => item.stage === STAGES[filterTab - 1]);
+    }
+
+    // 2. Search Filter
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        item => item.name.toLowerCase().includes(q) || 
+                item.customer.toLowerCase().includes(q) || 
+                item.id.toLowerCase().includes(q)
+      );
+    }
+
+    // 3. Priority Filter
+    if (priorityFilter !== 'all') {
+      result = result.filter(item => item.priority === priorityFilter);
+    }
+
+    // 4. Wood Filter
+    if (woodFilter !== 'all') {
+      result = result.filter(item => item.wood.toLowerCase() === woodFilter.toLowerCase());
+    }
+
+    // 5. Sort
+    result = [...result].sort((a, b) => {
+      switch (sortBy) {
+        case 'oldest': return new Date(a.dueDate) - new Date(b.dueDate);
+        case 'newest': return new Date(b.dueDate) - new Date(a.dueDate);
+        case 'progress-high': return b.progress - a.progress;
+        case 'progress-low': return a.progress - b.progress;
+        default: return 0;
+      }
+    });
+
+    return result;
+  }, [items, filterTab, search, priorityFilter, woodFilter, sortBy]);
+
+  // Pagination Logic
+  const totalPages = Math.ceil(processedItems.length / itemsPerPage);
+  const currentItems = processedItems.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  const handlePageChange = (event, value) => {
+    setPage(value);
+  };
+  
+  const resetFilters = () => {
+    setPriorityFilter('all');
+    setWoodFilter('all');
+    setSortBy('newest');
+    setSearch('');
+    setPage(1);
+  };
+
   return (
     <Box>
       {/* Header */}
@@ -384,30 +444,157 @@ export default function Production() {
             Track furniture items through each manufacturing stage
           </Typography>
         </Box>
-        <TextField
-          placeholder="Search orders..."
-          size="small"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{
-            width: { xs: '100%', sm: 280 },
-            '& .MuiOutlinedInput-root': {
+        <Box sx={{ display: 'flex', gap: 1.5, width: { xs: '100%', sm: 'auto' }, flexWrap: 'wrap' }}>
+          <Button
+            variant="contained"
+            startIcon={<Plus size={16} />}
+            sx={{
+              background: 'linear-gradient(135deg, #4B2C20, #6B4332)',
+              color: '#FFFFFF',
+              '&:hover': { background: 'linear-gradient(135deg, #3A1F15, #5A3628)' },
               borderRadius: '10px',
-              backgroundColor: '#fff',
-              fontSize: '0.85rem',
-            },
-          }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search size={16} color="#A09486" />
-                </InputAdornment>
-              ),
-            }
-          }}
-        />
+              fontSize: '0.82rem',
+              px: 2.5,
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(75,44,32,0.2)',
+              '& .MuiButton-startIcon': { color: '#FFFFFF' },
+            }}
+            onClick={() => setAddOpen(true)}
+          >
+            New Production Item
+          </Button>
+        </Box>
       </Box>
+
+      {/* Advanced Toolbar & Filters */}
+      <Paper sx={{ mb: 3, borderRadius: '16px', overflow: 'hidden', border: '1px solid #F0EBE4', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+        <Box sx={{ p: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', bgcolor: '#fff' }}>
+          <TextField
+            placeholder="Search production orders..."
+            size="small"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{
+              width: { xs: '100%', sm: 300 },
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '10px',
+                backgroundColor: '#F8F6F3',
+                fontSize: '0.85rem',
+                '& fieldset': { borderColor: 'transparent' },
+                '&:hover fieldset': { borderColor: '#E8E0D8' },
+                '&.Mui-focused fieldset': { borderColor: '#C8943E' },
+              },
+            }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search size={16} color="#A09486" />
+                  </InputAdornment>
+                ),
+              }
+            }}
+          />
+          
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button
+              variant="outlined"
+              startIcon={<SlidersHorizontal size={16} />}
+              onClick={() => setShowFilters(!showFilters)}
+              sx={{
+                borderRadius: '10px',
+                borderColor: showFilters ? '#C8943E' : '#E8E0D8',
+                color: showFilters ? '#C8943E' : '#5C524A',
+                bgcolor: showFilters ? 'rgba(200, 148, 62, 0.05)' : 'transparent',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                px: 2,
+                '&:hover': { borderColor: '#C8943E', bgcolor: 'rgba(200, 148, 62, 0.05)' }
+              }}
+            >
+              Filters
+            </Button>
+            
+            <FormControl size="small" sx={{ minWidth: 150 }}>
+              <Select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                displayEmpty
+                renderValue={(selected) => {
+                  const labels = {
+                    'newest': 'Sort: Due Soonest',
+                    'oldest': 'Sort: Due Latest',
+                    'progress-high': 'Sort: Highest Progress',
+                    'progress-low': 'Sort: Lowest Progress'
+                  };
+                  return <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><ArrowUpDown size={14} /> {labels[selected]}</Box>;
+                }}
+                sx={{
+                  borderRadius: '10px',
+                  fontSize: '0.82rem',
+                  fontWeight: 500,
+                  color: '#4B2C20',
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#E8E0D8' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#C8943E' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#C8943E' },
+                }}
+              >
+                <MenuItem value="newest">Due Soonest</MenuItem>
+                <MenuItem value="oldest">Due Latest</MenuItem>
+                <MenuItem value="progress-high">Highest Progress</MenuItem>
+                <MenuItem value="progress-low">Lowest Progress</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </Box>
+
+        <Collapse in={showFilters}>
+          <Box sx={{ p: 2, pt: 0, bgcolor: '#fff', display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel sx={{ fontSize: '0.82rem' }}>Priority</InputLabel>
+              <Select
+                value={priorityFilter}
+                onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}
+                label="Priority"
+                sx={{ borderRadius: '8px', fontSize: '0.82rem' }}
+              >
+                <MenuItem value="all">All Priorities</MenuItem>
+                <MenuItem value="high">High</MenuItem>
+                <MenuItem value="medium">Medium</MenuItem>
+                <MenuItem value="low">Low</MenuItem>
+              </Select>
+            </FormControl>
+            
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel sx={{ fontSize: '0.82rem' }}>Wood Type</InputLabel>
+              <Select
+                value={woodFilter}
+                onChange={(e) => { setWoodFilter(e.target.value); setPage(1); }}
+                label="Wood Type"
+                sx={{ borderRadius: '8px', fontSize: '0.82rem' }}
+              >
+                <MenuItem value="all">All Woods</MenuItem>
+                <MenuItem value="teak">Teak</MenuItem>
+                <MenuItem value="mahogany">Mahogany</MenuItem>
+                <MenuItem value="calamander">Calamander</MenuItem>
+                <MenuItem value="nedun">Nedun</MenuItem>
+              </Select>
+            </FormControl>
+
+            {(priorityFilter !== 'all' || woodFilter !== 'all') && (
+              <Button 
+                size="small" 
+                startIcon={<Trash2 size={14} />} 
+                onClick={resetFilters}
+                sx={{ color: '#D32F2F', fontSize: '0.75rem', fontWeight: 600, ml: 'auto' }}
+              >
+                Clear Filters
+              </Button>
+            )}
+          </Box>
+        </Collapse>
+      </Paper>
 
       {/* Stage Summary */}
       <StageSummary items={items} />
@@ -473,113 +660,199 @@ export default function Production() {
           gap: 2,
         }}
       >
-        {filtered.map((item) => (
-          <ProductionCard key={item.id} item={item} />
+        {currentItems.map((item, index) => (
+          <Box key={item.id} sx={{ animation: `fadeSlideIn 0.4s ease-out ${index * 0.05}s both` }}>
+            <ProductionCard item={item} />
+          </Box>
         ))}
       </Box>
 
-      {filtered.length === 0 && (
-        <Paper sx={{ p: 6, textAlign: 'center', borderRadius: '16px' }}>
-          <Filter size={40} color="#C4B8AC" />
-          <Typography sx={{ mt: 2, color: '#7A6E66', fontWeight: 500 }}>
-            No production items match your filters
+      {processedItems.length === 0 ? (
+        <Paper sx={{ p: 8, textAlign: 'center', borderRadius: '16px', border: '1px dashed #E8E0D8', bgcolor: '#FDFBF9' }}>
+          <Box sx={{ mx: 'auto', width: 64, height: 64, borderRadius: '50%', bgcolor: '#F0EBE4', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+            <Filter size={32} color="#A09486" />
+          </Box>
+          <Typography sx={{ color: '#4B2C20', fontWeight: 700, fontSize: '1.1rem', mb: 1 }}>
+            No matching items found
           </Typography>
+          <Typography sx={{ color: '#7A6E66', fontSize: '0.85rem', mb: 3 }}>
+            Try adjusting your search or filters to find what you're looking for.
+          </Typography>
+          <Button variant="outlined" onClick={resetFilters} sx={{ borderRadius: '8px', borderColor: '#C8943E', color: '#C8943E' }}>
+            Clear Filters
+          </Button>
         </Paper>
+      ) : (
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 4, flexWrap: 'wrap', gap: 2, p: 2, borderRadius: '16px', bgcolor: '#fff', border: '1px solid #F0EBE4' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography sx={{ fontSize: '0.85rem', color: '#7A6E66', fontWeight: 500 }}>
+              Showing {((page - 1) * itemsPerPage) + 1}-{Math.min(page * itemsPerPage, processedItems.length)} of {processedItems.length} items
+            </Typography>
+            <FormControl size="small">
+              <Select
+                value={itemsPerPage}
+                onChange={(e) => { setItemsPerPage(e.target.value); setPage(1); }}
+                sx={{
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  height: 32,
+                  bgcolor: '#F8F6F3',
+                  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                }}
+              >
+                <MenuItem value={6}>6 per page</MenuItem>
+                <MenuItem value={10}>10 per page</MenuItem>
+                <MenuItem value={20}>20 per page</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Pagination 
+            count={totalPages} 
+            page={page} 
+            onChange={handlePageChange} 
+            color="standard"
+            shape="rounded"
+            sx={{
+              '& .MuiPaginationItem-root': {
+                fontWeight: 600,
+                color: '#5C524A',
+                '&.Mui-selected': {
+                  bgcolor: '#4B2C20',
+                  color: '#fff',
+                  '&:hover': { bgcolor: '#3A1F15' }
+                }
+              }
+            }}
+          />
+        </Box>
       )}
 
-      {/* Add Production Item Floating Button */}
-      <Fab
-        aria-label="add"
-        onClick={() => setAddOpen(true)}
-        sx={{
-          position: 'fixed',
-          bottom: { xs: 24, md: 36 },
-          right: { xs: 24, md: 36 },
-          background: 'linear-gradient(135deg, #4B2C20, #6B4332)',
-          color: '#fff',
-          boxShadow: '0 4px 20px rgba(75,44,32,0.25)',
-          zIndex: 1201,
-          '&:hover': { background: 'linear-gradient(135deg, #3A1F15, #5A3628)' },
+      {/* Add Production Modal */}
+      <Dialog 
+        open={addOpen} 
+        onClose={() => setAddOpen(false)} 
+        maxWidth="xs" 
+        fullWidth 
+        slotProps={{ 
+          paper: { 
+            sx: { 
+              borderRadius: '24px', 
+              bgcolor: '#fff', 
+              m: { xs: 1.5, sm: 2 },
+              boxShadow: '0 24px 48px rgba(75, 44, 32, 0.15)',
+              overflow: 'hidden'
+            } 
+          } 
         }}
       >
-        <Plus size={24} />
-      </Fab>
-
-      {/* Add Production Modal */}
-      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '16px', bgcolor: '#fff', m: { xs: 1.5, sm: 2 } } } }}>
-        <DialogTitle sx={{ bgcolor: '#4B2C20', color: '#fff', fontWeight: 700, fontSize: '1.1rem', pb: 1.2, borderTopLeftRadius: '16px', borderTopRightRadius: '16px' }}>
+        <DialogTitle sx={{ 
+          background: 'linear-gradient(135deg, #4B2C20 0%, #3A1F15 100%)', 
+          color: '#fff', 
+          fontWeight: 700, 
+          fontSize: '1.2rem', 
+          px: 3,
+          py: 2.5,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5
+        }}>
+          <Box sx={{ p: 1, borderRadius: '10px', background: 'rgba(255,255,255,0.1)', display: 'flex' }}>
+            <Plus size={18} color="#C8943E" />
+          </Box>
           Add Production Item
         </DialogTitle>
-        <DialogContent sx={{ pt: '16px !important', pb: 1.5 }}>
-          <TextField
-            label="Product Name"
-            value={form.name}
-            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            fullWidth
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            label="Customer"
-            value={form.customer}
-            onChange={e => setForm(f => ({ ...f, customer: e.target.value }))}
-            fullWidth
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            select
-            label="Wood Type"
-            value={form.wood}
-            onChange={e => setForm(f => ({ ...f, wood: e.target.value }))}
-            fullWidth
-            sx={{ mb: 2 }}
-          >
-            {['Teak', 'Mahogany', 'Calamander', 'Nedun'].map((w) => (
-              <MenuItem key={w} value={w}>{w}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            label="Stage"
-            value={form.stage}
-            onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}
-            fullWidth
-            sx={{ mb: 2 }}
-          >
-            {STAGES.map((s) => (
-              <MenuItem key={s} value={s}>{s}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label="Due Date"
-            type="date"
-            value={form.dueDate}
-            onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
-            fullWidth
-            sx={{ mb: 2 }}
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <TextField
-            label="Assignee"
-            value={form.assignee}
-            onChange={e => setForm(f => ({ ...f, assignee: e.target.value }))}
-            fullWidth
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            select
-            label="Priority"
-            value={form.priority}
-            onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
-            fullWidth
-            sx={{ mb: 2 }}
-          >
-            {['high', 'medium', 'low'].map((p) => (
-              <MenuItem key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</MenuItem>
-            ))}
-          </TextField>
+        <DialogContent sx={{ pt: '24px !important', px: 3, pb: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <TextField
+              label="Product Name"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              fullWidth
+              slotProps={{
+                inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+              }}
+            />
+            <TextField
+              label="Customer"
+              value={form.customer}
+              onChange={e => setForm(f => ({ ...f, customer: e.target.value }))}
+              fullWidth
+              slotProps={{
+                inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+              }}
+            />
+            <TextField
+              select
+              label="Wood Type"
+              value={form.wood}
+              onChange={e => setForm(f => ({ ...f, wood: e.target.value }))}
+              fullWidth
+              slotProps={{
+                inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+              }}
+            >
+              {['Teak', 'Mahogany', 'Calamander', 'Nedun'].map((w) => (
+                <MenuItem key={w} value={w}>{w}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              label="Stage"
+              value={form.stage}
+              onChange={e => setForm(f => ({ ...f, stage: e.target.value }))}
+              fullWidth
+              slotProps={{
+                inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+              }}
+            >
+              {STAGES.map((s) => (
+                <MenuItem key={s} value={s}>{s}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Due Date"
+              type="date"
+              value={form.dueDate}
+              onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
+              fullWidth
+              slotProps={{ 
+                inputLabel: { shrink: true, sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+              }}
+            />
+            <TextField
+              label="Assignee"
+              value={form.assignee}
+              onChange={e => setForm(f => ({ ...f, assignee: e.target.value }))}
+              fullWidth
+              slotProps={{
+                inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+              }}
+            />
+            <TextField
+              select
+              label="Priority"
+              value={form.priority}
+              onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
+              fullWidth
+              slotProps={{
+                inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+              }}
+            >
+              {['high', 'medium', 'low'].map((p) => (
+                <MenuItem key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</MenuItem>
+              ))}
+            </TextField>
+          </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>
-          <Button onClick={() => setAddOpen(false)} sx={{ color: '#7A6E66', fontWeight: 600 }}>Cancel</Button>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 1, justifyContent: 'space-between' }}>
+          <Button onClick={() => setAddOpen(false)} sx={{ color: '#7A6E66', fontWeight: 600, px: 2, borderRadius: '10px' }}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleAdd}
@@ -587,16 +860,19 @@ export default function Production() {
               background: 'linear-gradient(135deg, #4B2C20, #6B4332)',
               color: '#fff',
               fontWeight: 700,
-              borderRadius: '8px',
-              px: 3,
-              boxShadow: 'none',
+              borderRadius: '10px',
+              px: 4,
+              py: 1,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              transition: 'all 0.2s',
               '&:hover': {
-                background: 'linear-gradient(135deg, #3A1F15, #5A3628)',
+                transform: 'translateY(-2px)',
+                boxShadow: '0 6px 16px rgba(0,0,0,0.15)',
               },
             }}
             disabled={!form.name || !form.customer || !form.dueDate || !form.assignee}
           >
-            Add
+            Create Item
           </Button>
         </DialogActions>
       </Dialog>

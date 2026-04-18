@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box, Paper, Typography, Chip, Tabs, Tab, TextField, InputAdornment,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Button, Avatar, Dialog, DialogTitle, DialogContent, DialogActions, Divider, IconButton, Snackbar, Alert, Radio, RadioGroup, FormControlLabel
+  Button, Avatar, Dialog, DialogTitle, DialogContent, DialogActions, Divider, IconButton, Snackbar, Alert, Radio,
+  Select, MenuItem, FormControl, InputLabel, Pagination, Collapse
 } from '@mui/material';
 import {
   Search, Download, FileText, Users, Clock, DollarSign,
-  CheckCircle2, XCircle, X, Printer,
+  CheckCircle2, XCircle, X, Printer, Plus, UserPlus, SlidersHorizontal, ArrowUpDown, Trash2, Edit3,
 } from 'lucide-react';
 
 // ── Mock Employee Data ─────────────────────────────────────
@@ -142,17 +143,48 @@ function PayslipDialog({ open, onClose, employee }) {
   const sal = calcSalary(employee);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth slotProps={{ paper: { sx: { borderRadius: '16px', m: { xs: 1, sm: 2 } } } }}>
-      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="sm" 
+      fullWidth 
+      slotProps={{ 
+        paper: { 
+          sx: { 
+            borderRadius: '24px', 
+            m: { xs: 1, sm: 2 },
+            boxShadow: '0 24px 48px rgba(75, 44, 32, 0.15)',
+            overflow: 'hidden'
+          } 
+        } 
+      }}
+    >
+      <DialogTitle sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        pb: 2,
+        pt: 2.5,
+        px: 3,
+        background: 'linear-gradient(135deg, #F8F6F3 0%, #fff 100%)',
+        borderBottom: '1px solid rgba(240, 235, 228, 0.8)'
+      }}>
         <Box>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: '#2D2420' }}>Digital Payslip</Typography>
-          <Typography sx={{ fontSize: '0.8rem', color: '#7A6E66' }}>March 2026</Typography>
+          <Typography variant="h6" sx={{ fontWeight: 800, color: '#2D2420', letterSpacing: '-0.02em', fontSize: '1.25rem' }}>Digital Payslip</Typography>
+          <Typography sx={{ fontSize: '0.85rem', color: '#7A6E66', fontWeight: 500, mt: 0.2 }}>March 2026</Typography>
         </Box>
-        <IconButton onClick={onClose} size="small">
-          <X size={18} />
+        <IconButton 
+          onClick={onClose} 
+          size="small"
+          sx={{ 
+            bgcolor: 'rgba(75, 44, 32, 0.04)',
+            '&:hover': { bgcolor: 'rgba(75, 44, 32, 0.08)' }
+          }}
+        >
+          <X size={18} color="#4B2C20" />
         </IconButton>
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ px: 3, pt: '24px !important' }}>
         {/* Employee Info */}
         <Paper sx={{ p: 2.5, borderRadius: '12px', bgcolor: '#FDFBF9', mb: 2.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -288,20 +320,68 @@ export default function Payroll() {
   const [exportOpen, setExportOpen] = useState(false);
   const [exportType, setExportType] = useState('pdf');
   const [snack, setSnack] = useState(false);
-
-  const filtered = employees.filter(
-    (e) =>
-      e.name.toLowerCase().includes(search.toLowerCase()) ||
-      e.id.toLowerCase().includes(search.toLowerCase()) ||
-      e.role.toLowerCase().includes(search.toLowerCase()) ||
-      e.department.toLowerCase().includes(search.toLowerCase())
-  );
+  const [snackMsg, setSnackMsg] = useState('Payroll exported!');
+  const [empList, setEmpList] = useState(employees);
+  const [addEmpOpen, setAddEmpOpen] = useState(false);
+  const [empForm, setEmpForm] = useState({ name: '', role: '', department: 'Production', basicSalary: '', otHours: '', bonus: '' });
+  
+  // Pagination & Sorting
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [sortBy, setSortBy] = useState('name');
+  const [showFilters, setShowFilters] = useState(false);
+  const [salaryRange, setSalaryRange] = useState('all');
 
   const departments = ['All', 'Production', 'Quality', 'Finishing', 'Warehouse', 'Admin', 'Finance'];
-  const deptFiltered = tab === 0 ? filtered : filtered.filter((e) => e.department === departments[tab]);
+
+  const processedEmps = useMemo(() => {
+    let result = empList;
+    // Search
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(e => e.name.toLowerCase().includes(q) || e.id.toLowerCase().includes(q) || e.role.toLowerCase().includes(q) || e.department.toLowerCase().includes(q));
+    }
+    // Department tab
+    if (tab !== 0) result = result.filter(e => e.department === departments[tab]);
+    // Salary range
+    if (salaryRange === 'high') result = result.filter(e => e.basicSalary >= 80000);
+    else if (salaryRange === 'mid') result = result.filter(e => e.basicSalary >= 55000 && e.basicSalary < 80000);
+    else if (salaryRange === 'low') result = result.filter(e => e.basicSalary < 55000);
+    // Sort
+    result = [...result].sort((a, b) => {
+      switch (sortBy) {
+        case 'name': return a.name.localeCompare(b.name);
+        case 'salary-high': return b.basicSalary - a.basicSalary;
+        case 'salary-low': return a.basicSalary - b.basicSalary;
+        case 'attendance': return b.attendance - a.attendance;
+        default: return 0;
+      }
+    });
+    return result;
+  }, [empList, search, tab, salaryRange, sortBy]);
+
+  const totalPages = Math.ceil(processedEmps.length / itemsPerPage);
+  const currentEmps = processedEmps.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
   const handleExport = () => {
     setExportOpen(false);
+    setSnackMsg(`Payroll exported as ${exportType.toUpperCase()}!`);
+    setSnack(true);
+  };
+
+  const handleAddEmp = () => {
+    const newId = `EMP-${(empList.length + 1).toString().padStart(3, '0')}`;
+    setEmpList([...empList, {
+      id: newId, name: empForm.name, role: empForm.role, department: empForm.department,
+      avatar: empForm.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2),
+      joinDate: new Date().toISOString().slice(0, 10),
+      basicSalary: Number(empForm.basicSalary), attendance: 26, totalDays: 26,
+      otHours: Number(empForm.otHours) || 0, epf: Math.round(Number(empForm.basicSalary) * 0.08),
+      etf: Math.round(Number(empForm.basicSalary) * 0.03), advances: 0, bonus: Number(empForm.bonus) || 0,
+    }]);
+    setAddEmpOpen(false);
+    setEmpForm({ name: '', role: '', department: 'Production', basicSalary: '', otHours: '', bonus: '' });
+    setSnackMsg('Employee added successfully!');
     setSnack(true);
   };
 
@@ -339,16 +419,28 @@ export default function Payroll() {
           />
           <Button
             variant="contained"
-            startIcon={<Download size={16} />}
+            startIcon={<UserPlus size={16} />}
             sx={{
               background: 'linear-gradient(135deg, #4B2C20, #6B4332)',
               color: '#FFFFFF',
               '&:hover': { background: 'linear-gradient(135deg, #3A1F15, #5A3628)' },
-              borderRadius: '10px',
-              fontSize: '0.82rem',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-              boxShadow: '0 2px 8px rgba(75,44,32,0.25)',
+              borderRadius: '10px', fontSize: '0.82rem', px: 2.5, whiteSpace: 'nowrap', flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(75,44,32,0.2)',
+              '& .MuiButton-startIcon': { color: '#FFFFFF' },
+            }}
+            onClick={() => setAddEmpOpen(true)}
+          >
+            Add Employee
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Download size={16} />}
+            sx={{
+              background: 'linear-gradient(135deg, #C8943E, #E5B86A)',
+              color: '#FFFFFF',
+              '&:hover': { background: 'linear-gradient(135deg, #A87A2F, #C8943E)' },
+              borderRadius: '10px', fontSize: '0.82rem', whiteSpace: 'nowrap', flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(200,148,62,0.25)',
               '& .MuiButton-startIcon': { color: '#FFFFFF' },
             }}
             onClick={() => setExportOpen(true)}
@@ -356,25 +448,100 @@ export default function Payroll() {
             Export Payroll
           </Button>
           {/* Export Payroll Modal */}
-          <Dialog open={exportOpen} onClose={() => setExportOpen(false)} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '16px', bgcolor: '#fff' } } }}>
-            <DialogTitle sx={{ bgcolor: '#C8943E', color: '#fff', fontWeight: 700, fontSize: '1.1rem', pb: 1.2, borderTopLeftRadius: '16px', borderTopRightRadius: '16px' }}>
+          <Dialog 
+            open={exportOpen} 
+            onClose={() => setExportOpen(false)} 
+            maxWidth="xs" 
+            fullWidth 
+            slotProps={{ 
+              paper: { 
+                sx: { 
+                  borderRadius: '24px', 
+                  bgcolor: '#fff',
+                  boxShadow: '0 24px 48px rgba(75, 44, 32, 0.15)',
+                  overflow: 'hidden'
+                } 
+              } 
+            }}
+          >
+            <DialogTitle sx={{ 
+              background: 'linear-gradient(135deg, #4B2C20 0%, #3A1F15 100%)', 
+              color: '#fff', 
+              fontWeight: 700, 
+              fontSize: '1.2rem', 
+              px: 3,
+              py: 2.5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5
+            }}>
+              <Box sx={{ p: 1, borderRadius: '10px', background: 'rgba(255,255,255,0.1)', display: 'flex' }}>
+                <Download size={18} color="#C8943E" />
+              </Box>
               Export Payroll
             </DialogTitle>
-            <DialogContent sx={{ pt: 2, pb: 1.5 }}>
-              <Typography sx={{ mb: 2, color: '#7A6E66', fontWeight: 500 }}>
-                Choose export format:
+            <DialogContent sx={{ pt: '24px !important', px: 3, pb: 2 }}>
+              <Typography sx={{ mb: 2.5, color: '#5C524A', fontWeight: 500, fontSize: '0.9rem' }}>
+                Select your preferred export format for the April 2026 payroll report.
               </Typography>
-              <RadioGroup
-                value={exportType}
-                onChange={e => setExportType(e.target.value)}
-                sx={{ mb: 2 }}
-              >
-                <FormControlLabel value="pdf" control={<Radio sx={{ color: '#C8943E', '&.Mui-checked': { color: '#C8943E' } }} />} label={<span style={{ color: '#4B2C20', fontWeight: 600 }}>PDF (Recommended)</span>} />
-                <FormControlLabel value="csv" control={<Radio sx={{ color: '#C8943E', '&.Mui-checked': { color: '#C8943E' } }} />} label={<span style={{ color: '#4B2C20', fontWeight: 600 }}>CSV (Excel)</span>} />
-              </RadioGroup>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Box
+                  onClick={() => setExportType('pdf')}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: exportType === 'pdf' ? '#C8943E' : '#E8E0D8',
+                    borderRadius: '12px',
+                    p: 2,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    bgcolor: exportType === 'pdf' ? 'rgba(200, 148, 62, 0.05)' : '#fff',
+                    transition: 'all 0.2s',
+                    '&:hover': { borderColor: '#C8943E', bgcolor: 'rgba(200, 148, 62, 0.02)' }
+                  }}
+                >
+                  <Radio 
+                    checked={exportType === 'pdf'} 
+                    onChange={() => setExportType('pdf')}
+                    sx={{ p: 0, color: '#C8943E', '&.Mui-checked': { color: '#C8943E' } }} 
+                  />
+                  <Box>
+                    <Typography sx={{ color: '#4B2C20', fontWeight: 700, fontSize: '0.95rem' }}>PDF Report</Typography>
+                    <Typography sx={{ color: '#7A6E66', fontSize: '0.75rem', mt: 0.2 }}>Recommended for sharing</Typography>
+                  </Box>
+                </Box>
+                
+                <Box
+                  onClick={() => setExportType('csv')}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: exportType === 'csv' ? '#C8943E' : '#E8E0D8',
+                    borderRadius: '12px',
+                    p: 2,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    bgcolor: exportType === 'csv' ? 'rgba(200, 148, 62, 0.05)' : '#fff',
+                    transition: 'all 0.2s',
+                    '&:hover': { borderColor: '#C8943E', bgcolor: 'rgba(200, 148, 62, 0.02)' }
+                  }}
+                >
+                  <Radio 
+                    checked={exportType === 'csv'} 
+                    onChange={() => setExportType('csv')}
+                    sx={{ p: 0, color: '#C8943E', '&.Mui-checked': { color: '#C8943E' } }} 
+                  />
+                  <Box>
+                    <Typography sx={{ color: '#4B2C20', fontWeight: 700, fontSize: '0.95rem' }}>CSV (Excel)</Typography>
+                    <Typography sx={{ color: '#7A6E66', fontSize: '0.75rem', mt: 0.2 }}>Best for data analysis</Typography>
+                  </Box>
+                </Box>
+              </Box>
             </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>
-              <Button onClick={() => setExportOpen(false)} sx={{ color: '#7A6E66', fontWeight: 600 }}>Cancel</Button>
+            <DialogActions sx={{ px: 3, pb: 3, pt: 1, justifyContent: 'space-between' }}>
+              <Button onClick={() => setExportOpen(false)} sx={{ color: '#7A6E66', fontWeight: 600, px: 2, borderRadius: '10px' }}>Cancel</Button>
               <Button
                 variant="contained"
                 onClick={handleExport}
@@ -382,15 +549,18 @@ export default function Payroll() {
                   background: 'linear-gradient(135deg, #C8943E, #E5B86A)',
                   color: '#fff',
                   fontWeight: 700,
-                  borderRadius: '8px',
-                  px: 3,
-                  boxShadow: 'none',
+                  borderRadius: '10px',
+                  px: 4,
+                  py: 1,
+                  boxShadow: '0 4px 12px rgba(200,148,62,0.2)',
+                  transition: 'all 0.2s',
                   '&:hover': {
-                    background: 'linear-gradient(135deg, #A87A2F, #C8943E)',
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 6px 16px rgba(200,148,62,0.3)',
                   },
                 }}
               >
-                Export
+                Download
               </Button>
             </DialogActions>
           </Dialog>
@@ -404,6 +574,49 @@ export default function Payroll() {
 
       {/* Summary */}
       <PayrollSummary />
+
+      {/* Filters Toolbar */}
+      <Paper sx={{ mb: 3, borderRadius: '16px', overflow: 'hidden', border: '1px solid #F0EBE4', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+        <Box sx={{ p: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', bgcolor: '#fff' }}>
+          <TextField
+            placeholder="Search employees..."
+            size="small"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            sx={{ width: { xs: '100%', sm: 280 }, '& .MuiOutlinedInput-root': { borderRadius: '10px', backgroundColor: '#F8F6F3', fontSize: '0.85rem', '& fieldset': { borderColor: 'transparent' }, '&:hover fieldset': { borderColor: '#E8E0D8' }, '&.Mui-focused fieldset': { borderColor: '#C8943E' } } }}
+            slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search size={16} color="#A09486" /></InputAdornment> } }}
+          />
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button variant="outlined" startIcon={<SlidersHorizontal size={16} />} onClick={() => setShowFilters(!showFilters)}
+              sx={{ borderRadius: '10px', borderColor: showFilters ? '#C8943E' : '#E8E0D8', color: showFilters ? '#C8943E' : '#5C524A', bgcolor: showFilters ? 'rgba(200,148,62,0.05)' : 'transparent', fontSize: '0.82rem', fontWeight: 600, px: 2, '&:hover': { borderColor: '#C8943E' } }}
+            >Filters</Button>
+            <FormControl size="small" sx={{ minWidth: 165 }}>
+              <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+                renderValue={(v) => { const l = { 'name': 'Sort: Name', 'salary-high': 'Sort: Salary ↑', 'salary-low': 'Sort: Salary ↓', 'attendance': 'Sort: Attendance' }; return <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><ArrowUpDown size={14} /> {l[v]}</Box>; }}
+                sx={{ borderRadius: '10px', fontSize: '0.82rem', fontWeight: 500, color: '#4B2C20', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#E8E0D8' } }}>
+                <MenuItem value="name">Name</MenuItem>
+                <MenuItem value="salary-high">Salary (High → Low)</MenuItem>
+                <MenuItem value="salary-low">Salary (Low → High)</MenuItem>
+                <MenuItem value="attendance">Attendance</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </Box>
+        <Collapse in={showFilters}>
+          <Box sx={{ p: 2, pt: 0, bgcolor: '#fff', display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+            <FormControl size="small" sx={{ minWidth: 155 }}>
+              <InputLabel sx={{ fontSize: '0.82rem' }}>Salary Range</InputLabel>
+              <Select value={salaryRange} onChange={(e) => { setSalaryRange(e.target.value); setPage(1); }} label="Salary Range" sx={{ borderRadius: '8px', fontSize: '0.82rem' }}>
+                <MenuItem value="all">All Ranges</MenuItem>
+                <MenuItem value="high">≥ LKR 80K</MenuItem>
+                <MenuItem value="mid">LKR 55K - 80K</MenuItem>
+                <MenuItem value="low">&lt; LKR 55K</MenuItem>
+              </Select>
+            </FormControl>
+            {salaryRange !== 'all' && <Button size="small" startIcon={<Trash2 size={14} />} onClick={() => { setSalaryRange('all'); setPage(1); }} sx={{ color: '#D32F2F', fontSize: '0.75rem', fontWeight: 600, ml: 'auto' }}>Clear Filters</Button>}
+          </Box>
+        </Collapse>
+      </Paper>
 
       {/* Table */}
       <Paper sx={{ borderRadius: '16px', overflow: 'hidden', mb: 3 }}>
@@ -456,7 +669,7 @@ export default function Payroll() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {deptFiltered.map((emp) => {
+              {currentEmps.map((emp) => {
                 const sal = calcSalary(emp);
                 const attendPct = (emp.attendance / emp.totalDays) * 100;
 
@@ -548,19 +761,68 @@ export default function Payroll() {
           </Table>
         </TableContainer>
 
-        {/* Footer */}
-        <Box sx={{ p: 2, borderTop: '2px solid #F0EBE4', display: 'flex', justifyContent: 'flex-end', gap: 4, bgcolor: '#FDFBF9' }}>
-          <Box sx={{ textAlign: 'right' }}>
-            <Typography sx={{ fontSize: '0.72rem', color: '#7A6E66', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Total Net Payroll
+        {/* Footer with Pagination */}
+        <Box sx={{ p: 2, borderTop: '2px solid #F0EBE4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, bgcolor: '#FDFBF9' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography sx={{ fontSize: '0.85rem', color: '#7A6E66', fontWeight: 500 }}>
+              Showing {Math.min(((page-1)*itemsPerPage)+1, processedEmps.length)}-{Math.min(page*itemsPerPage, processedEmps.length)} of {processedEmps.length}
             </Typography>
-            <Typography sx={{ fontWeight: 700, fontSize: '1.15rem', color: '#4B2C20' }}>
-              LKR {deptFiltered.reduce((s, e) => s + calcSalary(e).netSalary, 0).toLocaleString()}
-            </Typography>
+            <FormControl size="small">
+              <Select value={itemsPerPage} onChange={(e) => { setItemsPerPage(e.target.value); setPage(1); }}
+                sx={{ borderRadius: '8px', fontSize: '0.8rem', height: 32, bgcolor: '#F8F6F3', '& .MuiOutlinedInput-notchedOutline': { border: 'none' } }}>
+                <MenuItem value={5}>5 per page</MenuItem>
+                <MenuItem value={10}>10 per page</MenuItem>
+                <MenuItem value={20}>20 per page</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <Box sx={{ textAlign: 'right' }}>
+              <Typography sx={{ fontSize: '0.72rem', color: '#7A6E66', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Net Payroll</Typography>
+              <Typography sx={{ fontWeight: 700, fontSize: '1.15rem', color: '#4B2C20' }}>
+                LKR {processedEmps.reduce((s, e) => s + calcSalary(e).netSalary, 0).toLocaleString()}
+              </Typography>
+            </Box>
+            {totalPages > 1 && <Pagination count={totalPages} page={page} onChange={(_, v) => setPage(v)} shape="rounded"
+              sx={{ '& .MuiPaginationItem-root': { fontWeight: 600, color: '#5C524A', '&.Mui-selected': { bgcolor: '#4B2C20', color: '#fff', '&:hover': { bgcolor: '#3A1F15' } } } }} />}
           </Box>
         </Box>
       </Paper>
 
+      {/* Add Employee Modal */}
+      <Dialog open={addEmpOpen} onClose={() => setAddEmpOpen(false)} maxWidth="xs" fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '24px', bgcolor: '#fff', boxShadow: '0 24px 48px rgba(75,44,32,0.15)', overflow: 'hidden' } } }}>
+        <DialogTitle sx={{ background: 'linear-gradient(135deg, #4B2C20 0%, #3A1F15 100%)', color: '#fff', fontWeight: 700, fontSize: '1.2rem', px: 3, py: 2.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ p: 1, borderRadius: '10px', background: 'rgba(255,255,255,0.1)', display: 'flex' }}><UserPlus size={18} color="#C8943E" /></Box>
+          Add New Employee
+        </DialogTitle>
+        <DialogContent sx={{ pt: '24px !important', px: 3, pb: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <TextField label="Full Name" value={empForm.name} onChange={e => setEmpForm(f => ({ ...f, name: e.target.value }))} fullWidth
+              slotProps={{ inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } }, input: { sx: { borderRadius: '12px', '& fieldset': { borderColor: '#E8E0D8' } } } }} />
+            <TextField label="Role / Position" value={empForm.role} onChange={e => setEmpForm(f => ({ ...f, role: e.target.value }))} fullWidth
+              slotProps={{ inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } }, input: { sx: { borderRadius: '12px', '& fieldset': { borderColor: '#E8E0D8' } } } }} />
+            <TextField select label="Department" value={empForm.department} onChange={e => setEmpForm(f => ({ ...f, department: e.target.value }))} fullWidth
+              slotProps={{ inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } }, input: { sx: { borderRadius: '12px', '& fieldset': { borderColor: '#E8E0D8' } } } }}>
+              {['Production', 'Quality', 'Finishing', 'Warehouse', 'Admin', 'Finance'].map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+            </TextField>
+            <TextField label="Basic Salary (LKR)" value={empForm.basicSalary} onChange={e => setEmpForm(f => ({ ...f, basicSalary: e.target.value.replace(/\D/, '') }))} fullWidth
+              slotProps={{ inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } }, input: { sx: { borderRadius: '12px', '& fieldset': { borderColor: '#E8E0D8' } } } }} />
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField label="OT Hours" value={empForm.otHours} onChange={e => setEmpForm(f => ({ ...f, otHours: e.target.value.replace(/\D/, '') }))} fullWidth
+                slotProps={{ inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } }, input: { sx: { borderRadius: '12px', '& fieldset': { borderColor: '#E8E0D8' } } } }} />
+              <TextField label="Bonus (LKR)" value={empForm.bonus} onChange={e => setEmpForm(f => ({ ...f, bonus: e.target.value.replace(/\D/, '') }))} fullWidth
+                slotProps={{ inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } }, input: { sx: { borderRadius: '12px', '& fieldset': { borderColor: '#E8E0D8' } } } }} />
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 1, justifyContent: 'space-between' }}>
+          <Button onClick={() => setAddEmpOpen(false)} sx={{ color: '#7A6E66', fontWeight: 600, px: 2, borderRadius: '10px' }}>Cancel</Button>
+          <Button variant="contained" onClick={handleAddEmp}
+            sx={{ background: 'linear-gradient(135deg, #4B2C20, #6B4332)', color: '#fff', fontWeight: 700, borderRadius: '10px', px: 4, py: 1, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'all 0.2s', '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 6px 16px rgba(0,0,0,0.15)' } }}
+            disabled={!empForm.name || !empForm.role || !empForm.basicSalary}>Add Employee</Button>
+        </DialogActions>
+      </Dialog>
       {/* Payslip Dialog */}
       <PayslipDialog
         open={!!payslipEmp}

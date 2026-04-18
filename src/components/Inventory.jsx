@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box, Paper, Typography, Chip, Tabs, Tab, TextField, InputAdornment,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   LinearProgress, IconButton, Button, Avatar,
   Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert,
+  Select, MenuItem, FormControl, InputLabel, Pagination, Collapse
 } from '@mui/material';
 import {
   Search, Plus, TreePine, Wrench, AlertTriangle,
-  TrendingDown, TrendingUp, Package, Droplets,
+  TrendingDown, TrendingUp, Package, Droplets, SlidersHorizontal, ArrowUpDown, Trash2
 } from 'lucide-react';
 
 // ── Wood Inventory ─────────────────────────────────────────
@@ -120,19 +121,68 @@ export default function Inventory() {
     unit: '',
   });
 
-  const filteredWood = wood.filter(
-    (w) =>
-      w.name.toLowerCase().includes(search.toLowerCase()) ||
-      w.type.toLowerCase().includes(search.toLowerCase()) ||
-      w.supplier.toLowerCase().includes(search.toLowerCase())
-  );
+  // Advanced Filtering & Pagination
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState('name');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
 
-  const filteredHardware = hardware.filter(
-    (h) =>
-      h.name.toLowerCase().includes(search.toLowerCase()) ||
-      h.category.toLowerCase().includes(search.toLowerCase()) ||
-      h.supplier.toLowerCase().includes(search.toLowerCase())
-  );
+  const processedData = useMemo(() => {
+    let source = tab === 0 ? wood : hardware;
+    let result = source;
+
+    // Search
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        item => item.name.toLowerCase().includes(q) || 
+                item.supplier.toLowerCase().includes(q) || 
+                (item.type && item.type.toLowerCase().includes(q)) ||
+                (item.category && item.category.toLowerCase().includes(q))
+      );
+    }
+
+    // Status Filter
+    if (statusFilter !== 'all') {
+      result = result.filter(item => {
+        if (tab === 0) { // Wood status is based on pct
+          const pct = (item.boardFeet / item.minStock) * 100;
+          if (statusFilter === 'critical') return pct < 65;
+          if (statusFilter === 'low') return pct >= 65 && pct < 80;
+          return pct >= 80;
+        } else { // Hardware status
+          return item.status === statusFilter;
+        }
+      });
+    }
+
+    // Sort
+    result = [...result].sort((a, b) => {
+      switch (sortBy) {
+        case 'name': return a.name.localeCompare(b.name);
+        case 'stock-low': 
+          if (tab === 0) return a.boardFeet - b.boardFeet;
+          return a.qty - b.qty;
+        case 'stock-high': 
+          if (tab === 0) return b.boardFeet - a.boardFeet;
+          return b.qty - a.qty;
+        default: return 0;
+      }
+    });
+
+    return result;
+  }, [wood, hardware, tab, search, statusFilter, sortBy]);
+
+  const totalPages = Math.ceil(processedData.length / itemsPerPage);
+  const currentItems = processedData.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  const resetFilters = () => {
+    setStatusFilter('all');
+    setSortBy('name');
+    setSearch('');
+    setPage(1);
+  };
 
   const handleAdd = () => {
     if (form.type === 'wood') {
@@ -185,29 +235,6 @@ export default function Inventory() {
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1.5, width: { xs: '100%', sm: 'auto' }, flexWrap: 'wrap' }}>
-          <TextField
-            placeholder="Search inventory..."
-            size="small"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{
-              width: { xs: '100%', sm: 220 },
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                backgroundColor: '#fff',
-                fontSize: '0.85rem',
-              },
-            }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search size={16} color="#A09486" />
-                  </InputAdornment>
-                ),
-              }
-            }}
-          />
           <Button
             variant="contained"
             startIcon={<Plus size={16} />}
@@ -228,78 +255,122 @@ export default function Inventory() {
             Add Stock
           </Button>
           {/* Add Stock Modal */}
-          <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: '16px', bgcolor: '#fff' } } }}>
-            <DialogTitle sx={{ bgcolor: '#4B2C20', color: '#fff', fontWeight: 700, fontSize: '1.1rem', pb: 1.2, borderTopLeftRadius: '16px', borderTopRightRadius: '16px' }}>
-              Add Stock
+          <Dialog 
+            open={addOpen} 
+            onClose={() => setAddOpen(false)} 
+            maxWidth="xs" 
+            fullWidth 
+            slotProps={{ 
+              paper: { 
+                sx: { 
+                  borderRadius: '24px', 
+                  bgcolor: '#fff',
+                  boxShadow: '0 24px 48px rgba(75, 44, 32, 0.15)',
+                  overflow: 'hidden'
+                } 
+              } 
+            }}
+          >
+            <DialogTitle sx={{ 
+              background: 'linear-gradient(135deg, #4B2C20 0%, #3A1F15 100%)', 
+              color: '#fff', 
+              fontWeight: 700, 
+              fontSize: '1.2rem', 
+              px: 3,
+              py: 2.5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5
+            }}>
+              <Box sx={{ p: 1, borderRadius: '10px', background: 'rgba(255,255,255,0.1)', display: 'flex' }}>
+                <Plus size={18} color="#C8943E" />
+              </Box>
+              Add New Stock
             </DialogTitle>
-            <DialogContent sx={{ pt: 2, pb: 1.5 }}>
-              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+            <DialogContent sx={{ pt: '24px !important', px: 3, pb: 2 }}>
+              <Box sx={{ display: 'flex', gap: 1.5, mb: 3, p: 0.5, borderRadius: '12px', bgcolor: '#F8F6F3' }}>
                 <Button
-                  variant={form.type === 'wood' ? 'contained' : 'outlined'}
+                  fullWidth
+                  variant={form.type === 'wood' ? 'contained' : 'text'}
                   onClick={() => setForm(f => ({ ...f, type: 'wood' }))}
                   sx={{
-                    background: form.type === 'wood' ? 'linear-gradient(135deg, #4B2C20, #6B4332)' : '#fff',
-                    color: form.type === 'wood' ? '#fff' : '#4B2C20',
-                    borderColor: '#4B2C20',
-                    fontWeight: 600,
-                    borderRadius: '8px',
-                    px: 2,
+                    background: form.type === 'wood' ? '#fff' : 'transparent',
+                    color: form.type === 'wood' ? '#4B2C20' : '#7A6E66',
+                    fontWeight: form.type === 'wood' ? 700 : 500,
+                    borderRadius: '10px',
+                    py: 1,
+                    boxShadow: form.type === 'wood' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
+                    '&:hover': { background: form.type === 'wood' ? '#fff' : 'rgba(0,0,0,0.02)' }
                   }}
                 >
                   Timber
                 </Button>
                 <Button
-                  variant={form.type === 'hardware' ? 'contained' : 'outlined'}
+                  fullWidth
+                  variant={form.type === 'hardware' ? 'contained' : 'text'}
                   onClick={() => setForm(f => ({ ...f, type: 'hardware' }))}
                   sx={{
-                    background: form.type === 'hardware' ? 'linear-gradient(135deg, #C8943E, #E5B86A)' : '#fff',
-                    color: form.type === 'hardware' ? '#fff' : '#C8943E',
-                    borderColor: '#C8943E',
-                    fontWeight: 600,
-                    borderRadius: '8px',
-                    px: 2,
+                    background: form.type === 'hardware' ? '#fff' : 'transparent',
+                    color: form.type === 'hardware' ? '#C8943E' : '#7A6E66',
+                    fontWeight: form.type === 'hardware' ? 700 : 500,
+                    borderRadius: '10px',
+                    py: 1,
+                    boxShadow: form.type === 'hardware' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
+                    '&:hover': { background: form.type === 'hardware' ? '#fff' : 'rgba(0,0,0,0.02)' }
                   }}
                 >
                   Hardware
                 </Button>
               </Box>
-              <TextField
-                label={form.type === 'wood' ? 'Wood Name' : 'Item Name'}
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                fullWidth
-                sx={{ mb: 2 }}
-                InputLabelProps={{ style: { color: '#7A6E66' } }}
-              />
-              <TextField
-                label={form.type === 'wood' ? 'Board Feet' : 'Quantity'}
-                value={form.qty}
-                onChange={e => setForm(f => ({ ...f, qty: e.target.value.replace(/\D/, '') }))}
-                fullWidth
-                sx={{ mb: 2 }}
-                InputLabelProps={{ style: { color: '#7A6E66' } }}
-              />
-              <TextField
-                label="Supplier"
-                value={form.supplier}
-                onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))}
-                fullWidth
-                sx={{ mb: 2 }}
-                InputLabelProps={{ style: { color: '#7A6E66' } }}
-              />
-              {form.type === 'hardware' && (
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
                 <TextField
-                  label="Unit (e.g. pcs, gal)"
-                  value={form.unit}
-                  onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}
+                  label={form.type === 'wood' ? 'Wood Name' : 'Item Name'}
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   fullWidth
-                  sx={{ mb: 2 }}
-                  InputLabelProps={{ style: { color: '#7A6E66' } }}
+                  variant="outlined"
+                  slotProps={{
+                    inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                    input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+                  }}
                 />
-              )}
+                <TextField
+                  label={form.type === 'wood' ? 'Board Feet' : 'Quantity'}
+                  value={form.qty}
+                  onChange={e => setForm(f => ({ ...f, qty: e.target.value.replace(/\D/, '') }))}
+                  fullWidth
+                  slotProps={{
+                    inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                    input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+                  }}
+                />
+                <TextField
+                  label="Supplier"
+                  value={form.supplier}
+                  onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))}
+                  fullWidth
+                  slotProps={{
+                    inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                    input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+                  }}
+                />
+                {form.type === 'hardware' && (
+                  <TextField
+                    label="Unit (e.g. pcs, gal)"
+                    value={form.unit}
+                    onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}
+                    fullWidth
+                    slotProps={{
+                      inputLabel: { sx: { color: '#7A6E66', fontSize: '0.9rem' } },
+                      input: { sx: { borderRadius: '12px', bgcolor: '#fff', '& fieldset': { borderColor: '#E8E0D8' } } }
+                    }}
+                  />
+                )}
+              </Box>
             </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>
-              <Button onClick={() => setAddOpen(false)} sx={{ color: '#7A6E66', fontWeight: 600 }}>Cancel</Button>
+            <DialogActions sx={{ px: 3, pb: 3, pt: 1, justifyContent: 'space-between' }}>
+              <Button onClick={() => setAddOpen(false)} sx={{ color: '#7A6E66', fontWeight: 600, px: 2, borderRadius: '10px' }}>Cancel</Button>
               <Button
                 variant="contained"
                 onClick={handleAdd}
@@ -309,18 +380,19 @@ export default function Inventory() {
                     : 'linear-gradient(135deg, #C8943E, #E5B86A)',
                   color: '#fff',
                   fontWeight: 700,
-                  borderRadius: '8px',
-                  px: 3,
-                  boxShadow: 'none',
+                  borderRadius: '10px',
+                  px: 4,
+                  py: 1,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  transition: 'all 0.2s',
                   '&:hover': {
-                    background: form.type === 'wood'
-                      ? 'linear-gradient(135deg, #3A1F15, #5A3628)'
-                      : 'linear-gradient(135deg, #A87A2F, #C8943E)',
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.15)',
                   },
                 }}
                 disabled={!form.name || !form.qty || !form.supplier || (form.type === 'hardware' && !form.unit)}
               >
-                Add
+                Add to Stock
               </Button>
             </DialogActions>
           </Dialog>
@@ -337,28 +409,60 @@ export default function Inventory() {
 
       {/* Tabs */}
       <Paper sx={{ borderRadius: '16px', overflow: 'hidden', mb: 3 }}>
-        <Box sx={{ px: { xs: 1, md: 2 }, pt: 1, borderBottom: '1px solid #F0EBE4' }}>
+        <Box sx={{ px: { xs: 1, md: 2 }, pt: 1, borderBottom: '1px solid #F0EBE4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Tabs
             value={tab}
-            onChange={(_, v) => setTab(v)}
+            onChange={(_, v) => { setTab(v); setPage(1); }}
             sx={{
               '& .MuiTab-root': { fontSize: '0.85rem', minHeight: 48 },
               '& .Mui-selected': { color: '#4B2C20 !important', fontWeight: 600 },
               '& .MuiTabs-indicator': { backgroundColor: '#C8943E', height: 3, borderRadius: '3px 3px 0 0' },
             }}
           >
-            <Tab
-              icon={<TreePine size={16} />}
-              iconPosition="start"
-              label={`Timber Stock (${woodInventory.length})`}
-            />
-            <Tab
-              icon={<Wrench size={16} />}
-              iconPosition="start"
-              label={`Hardware & Supplies (${hardwareInventory.length})`}
-            />
+            <Tab icon={<TreePine size={16} />} iconPosition="start" label={`Timber Stock (${wood.length})`} />
+            <Tab icon={<Wrench size={16} />} iconPosition="start" label={`Hardware & Supplies (${hardware.length})`} />
           </Tabs>
+          
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', pb: 1, px: { xs: 1, md: 0 } }}>
+            <TextField
+              placeholder="Search items..." size="small" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              sx={{ width: 220, '& .MuiOutlinedInput-root': { borderRadius: '10px', backgroundColor: '#F8F6F3', fontSize: '0.85rem', '& fieldset': { borderColor: 'transparent' }, '&:hover fieldset': { borderColor: '#E8E0D8' }, '&.Mui-focused fieldset': { borderColor: '#C8943E' } } }}
+              slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search size={16} color="#A09486" /></InputAdornment> } }}
+            />
+            <Button variant="outlined" onClick={() => setShowFilters(!showFilters)}
+              sx={{ borderRadius: '10px', minWidth: 40, width: 40, height: 40, p: 0, borderColor: showFilters ? '#C8943E' : '#E8E0D8', color: showFilters ? '#C8943E' : '#5C524A', bgcolor: showFilters ? 'rgba(200,148,62,0.05)' : 'transparent', '&:hover': { borderColor: '#C8943E' } }}
+            ><SlidersHorizontal size={18} /></Button>
+          </Box>
         </Box>
+        
+        <Collapse in={showFilters}>
+          <Box sx={{ p: 2, bgcolor: '#FDFBF9', borderBottom: '1px solid #F0EBE4', display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+            <FormControl size="small" sx={{ minWidth: 150 }}>
+              <InputLabel sx={{ fontSize: '0.82rem' }}>Sort By</InputLabel>
+              <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)} label="Sort By" sx={{ borderRadius: '8px', fontSize: '0.82rem' }}>
+                <MenuItem value="name">Name (A-Z)</MenuItem>
+                <MenuItem value="stock-low">Lowest Stock First</MenuItem>
+                <MenuItem value="stock-high">Highest Stock First</MenuItem>
+              </Select>
+            </FormControl>
+            
+            <FormControl size="small" sx={{ minWidth: 150 }}>
+              <InputLabel sx={{ fontSize: '0.82rem' }}>Status Level</InputLabel>
+              <Select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} label="Status Level" sx={{ borderRadius: '8px', fontSize: '0.82rem' }}>
+                <MenuItem value="all">All Statuses</MenuItem>
+                <MenuItem value="ok">Healthy Stock</MenuItem>
+                <MenuItem value="low">Low Stock</MenuItem>
+                <MenuItem value="critical">Critical Stock</MenuItem>
+              </Select>
+            </FormControl>
+
+            {(sortBy !== 'name' || statusFilter !== 'all') && (
+              <Button size="small" startIcon={<Trash2 size={14} />} onClick={resetFilters} sx={{ color: '#D32F2F', fontSize: '0.75rem', fontWeight: 600, ml: 'auto' }}>
+                Clear Filters
+              </Button>
+            )}
+          </Box>
+        </Collapse>
 
         {/* Wood Tab */}
         {tab === 0 && (
@@ -377,7 +481,7 @@ export default function Inventory() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredWood.map((row) => {
+                {currentItems.map((row) => {
                   const pct = (row.boardFeet / row.minStock) * 100;
                   const isLow = pct < 80;
                   const isCritical = pct < 65;
@@ -477,7 +581,7 @@ export default function Inventory() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredHardware.map((row) => {
+                {currentItems.map((row) => {
                   const st = statusProps[row.status];
                   const categoryIcons = {
                     Hinges: Wrench,
@@ -539,6 +643,34 @@ export default function Inventory() {
               </TableBody>
             </Table>
           </TableContainer>
+        )}
+
+        {/* Footer with Pagination */}
+        {processedData.length > 0 ? (
+          <Box sx={{ p: 2, borderTop: '2px solid #F0EBE4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, bgcolor: '#FDFBF9' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Typography sx={{ fontSize: '0.85rem', color: '#7A6E66', fontWeight: 500 }}>
+                Showing {Math.min(((page-1)*itemsPerPage)+1, processedData.length)}-{Math.min(page*itemsPerPage, processedData.length)} of {processedData.length} items
+              </Typography>
+              <FormControl size="small">
+                <Select value={itemsPerPage} onChange={(e) => { setItemsPerPage(e.target.value); setPage(1); }}
+                  sx={{ borderRadius: '8px', fontSize: '0.8rem', height: 32, bgcolor: '#fff', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#E8E0D8' } }}>
+                  <MenuItem value={5}>5 per page</MenuItem>
+                  <MenuItem value={10}>10 per page</MenuItem>
+                  <MenuItem value={20}>20 per page</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            {totalPages > 1 && (
+              <Pagination count={totalPages} page={page} onChange={(_, v) => setPage(v)} shape="rounded"
+                sx={{ '& .MuiPaginationItem-root': { fontWeight: 600, color: '#5C524A', '&.Mui-selected': { bgcolor: '#4B2C20', color: '#fff', '&:hover': { bgcolor: '#3A1F15' } } } }} />
+            )}
+          </Box>
+        ) : (
+          <Box sx={{ p: 6, textAlign: 'center' }}>
+            <Typography sx={{ color: '#7A6E66', mb: 2 }}>No inventory items match your search or filters.</Typography>
+            <Button variant="outlined" onClick={resetFilters} sx={{ borderRadius: '8px', borderColor: '#C8943E', color: '#C8943E' }}>Clear Filters</Button>
+          </Box>
         )}
       </Paper>
     </Box>
